@@ -1,0 +1,89 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function uid() { return request.auth.uid; }
+
+    function userRole() {
+      return get(/databases/$(database)/documents/users/$(uid())).data.role;
+    }
+    function isOwner() { return isSignedIn() && userRole() == 'owner'; }
+    function isCustomer() { return isSignedIn() && userRole() == 'customer'; }
+
+    // ---------- users ----------
+    match /users/{userId} {
+      allow read:   if isSignedIn() && uid() == userId;
+      allow create: if isSignedIn() && uid() == userId
+                     && request.resource.data.role in ['customer','owner'];
+      allow update: if isSignedIn() && uid() == userId
+                     && request.resource.data.role == resource.data.role; // role is immutable
+      allow delete: if false;
+    }
+
+    // ---------- food_trucks ----------
+    match /food_trucks/{truckId} {
+      allow read: if true; // public discovery
+      allow create: if isOwner() && request.resource.data.owner_id == uid();
+      allow update, delete: if isOwner() && resource.data.owner_id == uid();
+
+      // ---------- menu_items (subcollection) ----------
+      match /menu_items/{itemId} {
+        allow read: if true;
+        allow write: if isOwner()
+                     && get(/databases/$(database)/documents/food_trucks/$(truckId)).data.owner_id == uid();
+      }
+    }
+
+    // ---------- live_locations (one doc per truck) ----------
+    match /live_locations/{truckId} {
+      allow read: if true;
+      allow write: if isOwner()
+                   && get(/databases/$(database)/documents/food_trucks/$(truckId)).data.owner_id == uid();
+    }
+
+    // ---------- orders ----------
+    match /orders/{orderId} {
+      allow create: if isCustomer()
+                     && request.resource.data.customer_id == uid()
+                     && request.resource.data.status == 'placed';
+      // Customer can read their own; truck owner can read orders for their truck
+      allow read: if isSignedIn() && (
+        resource.data.customer_id == uid()
+        || get(/databases/$(database)/documents/food_trucks/$(resource.data.truck_id)).data.owner_id == uid()
+      );
+      // Owner of the truck transitions order status
+      allow update: if isOwner()
+                     && get(/databases/$(database)/documents/food_trucks/$(resource.data.truck_id)).data.owner_id == uid();
+      allow delete: if false;
+
+      match /order_items/{itemId} {
+        allow read: if isSignedIn() && (
+          get(/databases/$(database)/documents/orders/$(orderId)).data.customer_id == uid()
+          || get(/databases/$(database)/documents/food_trucks/$(get(/databases/$(database)/documents/orders/$(orderId)).data.truck_id)).data.owner_id == uid()
+        );
+        allow create: if isCustomer()
+                       && get(/databases/$(database)/documents/orders/$(orderId)).data.customer_id == uid();
+        allow update, delete: if false;
+      }
+    }
+
+    // ---------- follows ----------
+    match /follows/{followId} {
+      // followId = "{user_id}_{truck_id}"
+      allow read:   if isSignedIn() && resource.data.user_id == uid();
+      allow create: if isSignedIn() && request.resource.data.user_id == uid();
+      allow delete: if isSignedIn() && resource.data.user_id == uid();
+      allow update: if false;
+    }
+
+    // ---------- notifications ----------
+    match /notifications/{notifId} {
+      allow read:   if isSignedIn() && resource.data.user_id == uid();
+      allow create: if isSignedIn(); // server logic / triggers in practice
+      allow update: if isSignedIn() && resource.data.user_id == uid();
+      allow delete: if isSignedIn() && resource.data.user_id == uid();
+    }
+  }
+}

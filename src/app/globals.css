@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+
+html, body {
+  background: #0B0D12;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+* { -webkit-tap-highlight-color: transparent; }
+
+/* Hide scrollbars on horizontal scrollers */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ---------- Form & button primitives ---------- */
+.input {
+  width: 100%;
+  height: 48px;
+  padding: 0 16px;
+  background: #14171F;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+  transition: border-color .15s ease;
+}
+.input:focus { border-color: rgba(255,59,127,.5); }
+textarea.input { padding: 12px 16px; min-height: 96px; resize: vertical; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 12px;
+  background: #14171F;
+  border: 1px solid rgba(255,255,255,.07);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform .08s ease, background-color .12s ease;
+}
+.btn:active { transform: scale(.98); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.btn.primary { background: #FF3B7F; border-color: #FF3B7F; color: #fff; }
+.btn.primary:hover:not(:disabled) { background: #E6326F; }
+.btn.danger { background: transparent; border-color: rgba(255,59,127,.4); color: #FF3B7F; }
+.btn.block { width: 100%; }
+.btn.sm { height: 36px; padding: 0 14px; font-size: 13px; border-radius: 10px; }
+.btn.ghost { background: transparent; border-color: rgba(255,255,255,.12); }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  background: #14171F;
+  border: 1px solid rgba(255,255,255,.07);
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  transition: background-color .12s ease;
+}
+.chip.active {
+  background: rgba(255,59,127,.12);
+  border-color: rgba(255,59,127,.5);
+}
+
+.card {
+  background: #14171F;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 16px;
+}
+
+.field-label {
+  font-size: 12px;
+  color: #9AA0AE;
+  font-weight: 600;
+  letter-spacing: .3px;
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* ---------- Pulse animation reused across map pins ---------- */
+@keyframes wya-pulse {
+  from { transform: scale(.6); opacity: .8; }
+  to   { transform: scale(2.4); opacity: 0; }
+}
+
+/* ---------- Live status indicator ---------- */
+.live-dot {
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+}
+.live-dot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: #FF3B7F;
+  animation: ping 1.6s cubic-bezier(0,0,.2,1) infinite;
+  opacity: .75;
+}
+.live-dot::after {
+  content: '';
+  position: relative;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #FF3B7F;
+}
+@keyframes ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+
+/* Page transitions */
+.page-enter { animation: pageIn .26s cubic-bezier(.22,.6,.25,1); }
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
