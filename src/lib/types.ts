@@ -94,6 +94,7 @@ export interface Order {
   total_cents: number;
   prep_minutes?: number;     // ETA for the order based on items
   pickup_code?: string;      // 4-digit code customer shows the truck at pickup
+  payment_method?: 'stripe' | 'cash_on_pickup' | 'simulated';
   payment_status?: 'pending' | 'paid' | 'failed';
   stripe_session_id?: string;
   stripe_payment_intent_id?: string;

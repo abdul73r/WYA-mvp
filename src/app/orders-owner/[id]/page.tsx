@@ -57,6 +57,26 @@ function Detail() {
         <span className="text-xs font-bold uppercase tracking-wider text-accent">{order.status}</span>
       </header>
 
+      {/* Payment-method banner */}
+      {order.payment_method === 'cash_on_pickup' && (
+        <div className="mx-5 mt-4 rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 flex items-center gap-3">
+          <span className="text-2xl">💵</span>
+          <div>
+            <div className="text-sm font-bold">Collect {dollars(order.total_cents)} at pickup</div>
+            <div className="text-[11px] text-text-muted">Customer is paying cash or card in person</div>
+          </div>
+        </div>
+      )}
+      {order.payment_method === 'stripe' && order.payment_status === 'paid' && (
+        <div className="mx-5 mt-4 rounded-xl border border-success/40 bg-success/10 px-4 py-3 flex items-center gap-3">
+          <span className="text-2xl">✓</span>
+          <div>
+            <div className="text-sm font-bold">Paid {dollars(order.total_cents)} via card</div>
+            <div className="text-[11px] text-text-muted">Funds will land in your Stripe balance · transfer from Wallet</div>
+          </div>
+        </div>
+      )}
+
       <div className="px-5 mt-4">
         <Link href={`/chat/${order.id}`} className="btn ghost block">💬 Message {order.customer_name.split(' ')[0]}</Link>
       </div>

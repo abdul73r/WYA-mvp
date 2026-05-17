@@ -21,6 +21,8 @@ const TIP_OPTIONS = [
   { label: '25%',    pct: 25 },
 ];
 
+type PayMethod = 'stripe' | 'cash_on_pickup';
+
 export default function CartPage() {
   return (
     <RoleGuard allow={['customer']}>
@@ -42,11 +44,15 @@ function Cart() {
   const [promoCode, setPromoCode] = useState('');
   const [promoErr, setPromoErr] = useState<string | null>(null);
   const [truck, setTruck] = useState<FoodTruck | null>(null);
+  const [payMethod, setPayMethod] = useState<PayMethod>('cash_on_pickup');
 
-  // Fetch the truck so we know whether to do Stripe Checkout or simulate
   useEffect(() => {
     if (!cart) return;
-    getTruck(cart.truck_id).then(setTruck).catch(() => {});
+    getTruck(cart.truck_id).then((t) => {
+      setTruck(t);
+      // If the truck takes Stripe, default to in-app payment for convenience
+      if (t?.stripe_charges_enabled) setPayMethod('stripe');
+    }).catch(() => {});
   }, [cart?.truck_id]);
 
   const subtotal = cartTotal(cart);
@@ -76,7 +82,8 @@ function Cart() {
     if (!cart || !user || !profile) return;
     setBusy(true);
     try {
-      // 1) Always create the order first so we have a stable ID
+      const isStripe = payMethod === 'stripe' && stripeEnabled && truck?.stripe_account_id;
+
       const { order_id } = await placeOrder({
         customer_id: user.uid,
         customer_name: profile.name,
@@ -88,11 +95,11 @@ function Cart() {
         promo_code: promo?.code,
         discount_cents: discount,
         prep_minutes: prepMinutes,
-        payment_status: stripeEnabled ? 'pending' : 'paid',
+        payment_method: isStripe ? 'stripe' : 'cash_on_pickup',
+        payment_status: isStripe ? 'pending' : 'paid',
       });
 
-      // 2) If the truck has Stripe Connect, redirect to Stripe Checkout
-      if (stripeEnabled && truck?.stripe_account_id) {
+      if (isStripe) {
         const res = await fetch('/api/stripe/checkout-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -114,13 +121,13 @@ function Cart() {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error || 'Checkout failed');
         clearCart();
-        window.location.href = json.url; // off-site to Stripe Checkout
+        window.location.href = json.url;
         return;
       }
 
-      // 3) Otherwise (truck not Stripe-connected): simulated flow
+      // Cash on pickup — no payment processing, just commit and notify the truck
       clearCart();
-      showToast('Order placed (simulated payment)');
+      showToast('Order sent — pay when you pick up');
       router.replace(`/orders/${order_id}`);
     } catch (e: any) {
       showToast(e?.message || 'Failed to place order');
@@ -149,7 +156,7 @@ function Cart() {
   }
 
   return (
-    <div className="min-h-screen max-w-md mx-auto pb-32 page-enter">
+    <div className="min-h-screen max-w-md mx-auto pb-44 page-enter">
       <header className="sticky top-0 z-30 bg-bg/95 backdrop-blur border-b border-stroke px-5 py-3 flex items-center gap-3">
         <button onClick={() => router.back()} className="w-9 h-9 rounded-full bg-surface border border-stroke grid place-items-center">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round"><path d="M15 6l-6 6 6 6" /></svg>
@@ -161,6 +168,7 @@ function Cart() {
         <button onClick={() => { clearCart(); showToast('Cart cleared'); }} className="text-xs text-text-muted">Clear</button>
       </header>
 
+      {/* Pickup info */}
       <div className="px-5 mt-4">
         <div className="card p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-accent/15 grid place-items-center text-accent">
@@ -175,6 +183,7 @@ function Cart() {
         </div>
       </div>
 
+      {/* Cart items */}
       <div className="mt-2">
         {cart.lines.map((l) => (
           <div key={l.menu_item_id} className="px-5 py-3 border-b border-stroke flex gap-3 items-center">
@@ -196,11 +205,13 @@ function Cart() {
         ))}
       </div>
 
+      {/* Notes */}
       <div className="px-5 mt-5">
         <label className="field-label">Notes for the truck (optional)</label>
         <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. No onions, extra hot sauce" />
       </div>
 
+      {/* Promo */}
       <div className="px-5 mt-5">
         <label className="field-label">Promo code</label>
         {promoCode ? (
@@ -221,6 +232,7 @@ function Cart() {
         {promoErr && <div className="text-xs text-accent mt-1">{promoErr}</div>}
       </div>
 
+      {/* Tip */}
       <div className="px-5 mt-5">
         <div className="field-label">Tip the truck</div>
         <div className="grid grid-cols-4 gap-2">
@@ -233,6 +245,48 @@ function Cart() {
         </div>
       </div>
 
+      {/* Payment method picker */}
+      <div className="px-5 mt-6">
+        <div className="field-label">How do you want to pay?</div>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => stripeEnabled && setPayMethod('stripe')}
+            disabled={!stripeEnabled}
+            className={`text-left p-4 rounded-xl border flex items-center gap-3 ${payMethod === 'stripe' ? 'border-accent bg-accent/10' : 'border-stroke bg-surface'} disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <div className="w-10 h-10 rounded-lg bg-surface-2 grid place-items-center text-xl">💳</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm">Pay now with card</div>
+              <div className="text-[11px] text-text-muted">
+                {stripeEnabled
+                  ? 'Secure card payment via Stripe — no need to handle cash'
+                  : 'Not available — this truck doesn’t accept in-app payments yet'}
+              </div>
+            </div>
+            <div className={`w-5 h-5 rounded-full border-2 grid place-items-center ${payMethod === 'stripe' ? 'border-accent' : 'border-stroke-2'}`}>
+              {payMethod === 'stripe' && <div className="w-2.5 h-2.5 rounded-full bg-accent" />}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPayMethod('cash_on_pickup')}
+            className={`text-left p-4 rounded-xl border flex items-center gap-3 ${payMethod === 'cash_on_pickup' ? 'border-accent bg-accent/10' : 'border-stroke bg-surface'}`}
+          >
+            <div className="w-10 h-10 rounded-lg bg-surface-2 grid place-items-center text-xl">💵</div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm">Pay at the truck</div>
+              <div className="text-[11px] text-text-muted">Cash or card in person when you pick up your order</div>
+            </div>
+            <div className={`w-5 h-5 rounded-full border-2 grid place-items-center ${payMethod === 'cash_on_pickup' ? 'border-accent' : 'border-stroke-2'}`}>
+              {payMethod === 'cash_on_pickup' && <div className="w-2.5 h-2.5 rounded-full bg-accent" />}
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* Totals */}
       <div className="px-5 mt-6 text-sm space-y-1.5">
         <div className="flex justify-between"><span className="text-text-muted">Subtotal</span><span>{dollars(subtotal)}</span></div>
         {discount > 0 && (
@@ -245,19 +299,22 @@ function Cart() {
         </div>
       </div>
 
+      {/* Sticky CTA */}
       <div className="fixed left-0 right-0 bottom-[72px] z-30 max-w-md mx-auto px-4 pb-2 pointer-events-none">
         <button
           className="btn primary block pointer-events-auto shadow-xl shadow-accent/30 flex justify-between"
           onClick={onPlace}
           disabled={busy}
         >
-          <span>{busy ? <Spinner /> : (stripeEnabled ? 'Pay with Stripe' : 'Place pickup order')}</span>
+          <span>
+            {busy ? <Spinner /> : payMethod === 'stripe' ? 'Pay with card' : 'Place order — pay at truck'}
+          </span>
           <span className="font-bold">{dollars(total)}</span>
         </button>
         <p className="text-[10px] text-text-muted text-center mt-2 pointer-events-auto">
-          {stripeEnabled
-            ? 'Secure card payment by Stripe · funds go to the truck minus our 5% fee'
-            : 'Truck hasn’t connected Stripe yet — this checkout is simulated'}
+          {payMethod === 'stripe'
+            ? 'You’ll be sent to Stripe to enter your card'
+            : 'No charge now · pay the truck in person at pickup'}
         </p>
       </div>
     </div>

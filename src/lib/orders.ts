@@ -26,6 +26,7 @@ export async function placeOrder(args: {
   prep_minutes?: number;
   /** 'paid' = simulated payment (no Stripe). 'pending' = waiting for Stripe Checkout to confirm. */
   payment_status?: 'pending' | 'paid';
+  payment_method?: 'stripe' | 'cash_on_pickup' | 'simulated';
 }): Promise<{ order_id: string; pickup_code: string; total_cents: number }> {
   const subtotal = args.lines.reduce((s, l) => s + l.unit_price_cents * l.qty, 0);
   const discount = Math.min(args.discount_cents || 0, subtotal);
@@ -51,6 +52,7 @@ export async function placeOrder(args: {
     prep_minutes: args.prep_minutes || 0,
     pickup_code: pickupCode,
     payment_status: paymentStatus,
+    payment_method: args.payment_method || 'simulated',
     notes: args.notes || '',
     rated: false,
     placed_at: serverTimestamp(),
@@ -140,7 +142,11 @@ export function subscribeCustomerOrders(
   );
 }
 
-/** Truck-side orders feed. Hides orders that haven't been paid yet (pending_payment). */
+/**
+ * Truck-side orders feed. Hides orders that started a Stripe payment but never
+ * finished it — those would never produce money for the truck.
+ * Cash-on-pickup orders are shown (owner collects payment at pickup).
+ */
 export function subscribeTruckOrders(
   truckId: string,
   cb: (orders: Order[]) => void,
@@ -151,7 +157,7 @@ export function subscribeTruckOrders(
     (qs) => {
       const list = qs.docs
         .map((d) => ({ id: d.id, ...d.data() } as Order))
-        .filter((o) => o.payment_status !== 'pending'); // owner only sees paid orders
+        .filter((o) => !(o.payment_method === 'stripe' && o.payment_status === 'pending'));
       list.sort((a, b) => ts(b) - ts(a));
       cb(list);
     },

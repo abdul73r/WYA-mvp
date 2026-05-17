@@ -120,6 +120,19 @@ function OrderDetail() {
         </div>
       )}
 
+      {/* Pay-at-pickup reminder */}
+      {order.payment_method === 'cash_on_pickup' && !cancelled && order.status !== 'completed' && (
+        <div className="px-5 mt-4">
+          <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 flex items-center gap-3">
+            <span className="text-2xl">💵</span>
+            <div>
+              <div className="text-sm font-bold">Bring {dollars(order.total_cents)} for pickup</div>
+              <div className="text-[11px] text-text-muted">You'll pay the truck directly when you collect your order</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="px-5 mt-4">
         <div className="rounded-2xl p-5 border border-accent/30 bg-gradient-to-br from-accent/15 to-surface">
           <div className="text-xs uppercase tracking-widest text-accent font-bold flex items-center gap-2">
