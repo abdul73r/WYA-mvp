@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { RoleGuard } from '@/components/RoleGuard';
-import { CustomerNav } from '@/components/CustomerNav';
+import { AlertsBell, CustomerNav } from '@/components/CustomerNav';
 import { subscribeLiveTrucks } from '@/lib/trucks';
 import { getCurrentLocation, distanceMiles, openDirections, Coords } from '@/lib/location';
 import type { FoodTruck, CuisineTag } from '@/lib/types';
@@ -99,9 +99,10 @@ function MapView() {
       {/* Header */}
       <header className="sticky top-0 z-30 bg-bg/95 backdrop-blur border-b border-stroke px-4 py-3 flex items-center gap-2">
         <h1 className="text-lg font-bold flex-1">Live map</h1>
-        <Link href="/search" className="w-9 h-9 rounded-full bg-surface border border-stroke grid place-items-center" aria-label="Search">
+        <Link href="/search" className="w-10 h-10 rounded-full bg-surface border border-stroke grid place-items-center" aria-label="Search">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>
         </Link>
+        <AlertsBell />
       </header>
 
       {/* Filter chips */}

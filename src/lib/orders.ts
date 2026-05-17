@@ -24,14 +24,16 @@ export async function placeOrder(args: {
   promo_code?: string;
   discount_cents?: number;
   prep_minutes?: number;
-}): Promise<string> {
+  /** 'paid' = simulated payment (no Stripe). 'pending' = waiting for Stripe Checkout to confirm. */
+  payment_status?: 'pending' | 'paid';
+}): Promise<{ order_id: string; pickup_code: string; total_cents: number }> {
   const subtotal = args.lines.reduce((s, l) => s + l.unit_price_cents * l.qty, 0);
   const discount = Math.min(args.discount_cents || 0, subtotal);
   const tax = Math.round((subtotal - discount) * TAX_RATE);
   const tip = args.tip_cents || 0;
   const total = subtotal - discount + tax + tip;
-
-  const pickupCode = String(Math.floor(1000 + Math.random() * 9000)); // 4-digit
+  const pickupCode = String(Math.floor(1000 + Math.random() * 9000));
+  const paymentStatus = args.payment_status || 'paid';
 
   const orderRef = await addDoc(collection(db, 'orders'), {
     customer_id: args.customer_id,
@@ -48,6 +50,7 @@ export async function placeOrder(args: {
     total_cents: total,
     prep_minutes: args.prep_minutes || 0,
     pickup_code: pickupCode,
+    payment_status: paymentStatus,
     notes: args.notes || '',
     rated: false,
     placed_at: serverTimestamp(),
@@ -67,15 +70,45 @@ export async function placeOrder(args: {
   });
   await batch.commit();
 
-  await addNotification({
-    user_id: args.customer_id,
-    type: 'order_status',
-    title: `Order placed at ${args.truck_name}`,
-    body: 'Waiting for the truck to accept your order.',
-    link: `/orders/${orderRef.id}`,
-  });
+  // Only notify the customer when payment is already settled (simulated flow).
+  // For pending Stripe flow, the notification fires after verification.
+  if (paymentStatus === 'paid') {
+    await addNotification({
+      user_id: args.customer_id,
+      type: 'order_status',
+      title: `Order placed at ${args.truck_name}`,
+      body: 'Waiting for the truck to accept your order.',
+      link: `/orders/${orderRef.id}`,
+    });
+  }
 
-  return orderRef.id;
+  return { order_id: orderRef.id, pickup_code: pickupCode, total_cents: total };
+}
+
+/**
+ * Mark an order as paid after Stripe Checkout has been verified.
+ * Records the Stripe IDs and notifies the customer that payment went through.
+ */
+export async function markOrderPaid(orderId: string, stripeIds: {
+  session_id: string;
+  payment_intent_id?: string;
+}) {
+  const ref = doc(db, 'orders', orderId);
+  await updateDoc(ref, {
+    payment_status: 'paid',
+    stripe_session_id: stripeIds.session_id,
+    stripe_payment_intent_id: stripeIds.payment_intent_id || '',
+  });
+  const order = await getOrder(orderId);
+  if (order) {
+    await addNotification({
+      user_id: order.customer_id,
+      type: 'order_status',
+      title: `Payment confirmed · ${order.truck_name}`,
+      body: 'Waiting for the truck to accept your order.',
+      link: `/orders/${orderId}`,
+    });
+  }
 }
 
 export async function getOrder(orderId: string): Promise<Order | null> {
@@ -91,7 +124,6 @@ export function subscribeOrder(orderId: string, cb: (o: Order | null) => void): 
   );
 }
 
-/** Customer's orders — sorted newest-first client-side so no composite index is needed. */
 export function subscribeCustomerOrders(
   customerId: string,
   cb: (orders: Order[]) => void,
@@ -108,7 +140,7 @@ export function subscribeCustomerOrders(
   );
 }
 
-/** Truck's orders — sorted newest-first client-side. */
+/** Truck-side orders feed. Hides orders that haven't been paid yet (pending_payment). */
 export function subscribeTruckOrders(
   truckId: string,
   cb: (orders: Order[]) => void,
@@ -117,7 +149,9 @@ export function subscribeTruckOrders(
   return onSnapshot(
     q,
     (qs) => {
-      const list = qs.docs.map((d) => ({ id: d.id, ...d.data() } as Order));
+      const list = qs.docs
+        .map((d) => ({ id: d.id, ...d.data() } as Order))
+        .filter((o) => o.payment_status !== 'pending'); // owner only sees paid orders
       list.sort((a, b) => ts(b) - ts(a));
       cb(list);
     },

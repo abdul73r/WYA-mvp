@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { RoleGuard } from '@/components/RoleGuard';
-import { CustomerNav } from '@/components/CustomerNav';
+import { AlertsBell, CustomerNav } from '@/components/CustomerNav';
 import { useAuth } from '@/lib/auth';
 import { subscribeCustomerOrders, listOrderItems } from '@/lib/orders';
 import { addToCart, useCart } from '@/lib/cart';
@@ -76,8 +76,9 @@ function Orders() {
 
   return (
     <div className="min-h-screen max-w-md mx-auto pb-24 page-enter">
-      <header className="sticky top-0 z-30 bg-bg/95 backdrop-blur border-b border-stroke px-5 py-3">
-        <h1 className="text-lg font-bold">Your orders</h1>
+      <header className="sticky top-0 z-30 bg-bg/95 backdrop-blur border-b border-stroke px-5 py-3 flex items-center gap-2">
+        <h1 className="text-lg font-bold flex-1">Your orders</h1>
+        <AlertsBell />
       </header>
 
       {orders === null && <div className="p-10 grid place-items-center"><Spinner /></div>}

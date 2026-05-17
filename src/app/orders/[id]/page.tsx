@@ -1,11 +1,13 @@
 'use client';
+export const dynamic = 'force-dynamic';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { RoleGuard } from '@/components/RoleGuard';
 import { CustomerNav } from '@/components/CustomerNav';
 import { Spinner } from '@/components/Spinner';
-import { cancelOrderByCustomer, subscribeOrder, listOrderItems } from '@/lib/orders';
+import { cancelOrderByCustomer, markOrderPaid, subscribeOrder, listOrderItems } from '@/lib/orders';
 import { getTruck } from '@/lib/trucks';
 import { useAuth } from '@/lib/auth';
 import { showToast, ToastHost } from '@/components/Toast';
@@ -33,10 +35,12 @@ export default function OrderDetailPage() {
 function OrderDetail() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const params = useSearchParams();
   const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<any[]>([]);
   const [truck, setTruck] = useState<FoodTruck | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -47,6 +51,31 @@ function OrderDetail() {
     listOrderItems(id).then(setItems).catch(() => {});
     return u;
   }, [id]);
+
+  // Stripe Checkout redirect-back: verify the session and mark the order paid
+  useEffect(() => {
+    const stripeParam = params.get('stripe');
+    const sessionId = params.get('session_id');
+    if (stripeParam !== 'success' || !sessionId || !id) return;
+    setVerifying(true);
+    (async () => {
+      try {
+        const res = await fetch('/api/stripe/verify-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+        const json = await res.json();
+        if (json.paid && json.order_id === id) {
+          await markOrderPaid(id, { session_id: sessionId, payment_intent_id: json.payment_intent_id });
+        }
+      } catch (e) { console.error(e); }
+      finally {
+        setVerifying(false);
+        router.replace(`/orders/${id}`); // strip query string
+      }
+    })();
+  }, [params, id, router]);
 
   async function cancel() {
     if (!order || !user) return;
@@ -78,6 +107,18 @@ function OrderDetail() {
           <div className="text-[11px] text-text-muted">#{order.id.slice(0,6).toUpperCase()} · {relativeTime(order.placed_at)}</div>
         </div>
       </header>
+
+      {/* Payment-pending banner */}
+      {order.payment_status === 'pending' && !cancelled && (
+        <div className="px-5 mt-4">
+          <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
+            <div className="font-bold">Payment incomplete</div>
+            <div className="text-xs text-text-muted mt-1">
+              {verifying ? 'Verifying your payment with Stripe…' : 'You closed the Stripe checkout before paying. Tap the button below to finish.'}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="px-5 mt-4">
         <div className="rounded-2xl p-5 border border-accent/30 bg-gradient-to-br from-accent/15 to-surface">

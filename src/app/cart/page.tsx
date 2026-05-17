@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RoleGuard } from '@/components/RoleGuard';
@@ -7,10 +7,12 @@ import { CustomerNav } from '@/components/CustomerNav';
 import { clearCart, setLineQty, useCart, cartTotal } from '@/lib/cart';
 import { placeOrder } from '@/lib/orders';
 import { applyPromo } from '@/lib/promos';
+import { getTruck } from '@/lib/trucks';
 import { useAuth } from '@/lib/auth';
 import { dollars } from '@/lib/utils';
 import { Spinner } from '@/components/Spinner';
 import { showToast, ToastHost } from '@/components/Toast';
+import type { FoodTruck } from '@/lib/types';
 
 const TIP_OPTIONS = [
   { label: 'No tip', cents: 0 },
@@ -39,6 +41,13 @@ function Cart() {
   const [promoInput, setPromoInput] = useState('');
   const [promoCode, setPromoCode] = useState('');
   const [promoErr, setPromoErr] = useState<string | null>(null);
+  const [truck, setTruck] = useState<FoodTruck | null>(null);
+
+  // Fetch the truck so we know whether to do Stripe Checkout or simulate
+  useEffect(() => {
+    if (!cart) return;
+    getTruck(cart.truck_id).then(setTruck).catch(() => {});
+  }, [cart?.truck_id]);
 
   const subtotal = cartTotal(cart);
   const promo = useMemo(() => applyPromo(promoCode, subtotal), [promoCode, subtotal]);
@@ -53,14 +62,12 @@ function Cart() {
     [cart],
   );
 
+  const stripeEnabled = !!truck?.stripe_charges_enabled;
+
   function tryApplyPromo() {
     setPromoErr(null);
     const res = applyPromo(promoInput, subtotal);
-    if (!res) {
-      setPromoErr('That code isn’t valid for this order.');
-      setPromoCode('');
-      return;
-    }
+    if (!res) { setPromoErr('That code isn’t valid for this order.'); setPromoCode(''); return; }
     setPromoCode(res.code);
     showToast(`${res.code} applied — ${res.label}`);
   }
@@ -69,7 +76,8 @@ function Cart() {
     if (!cart || !user || !profile) return;
     setBusy(true);
     try {
-      const orderId = await placeOrder({
+      // 1) Always create the order first so we have a stable ID
+      const { order_id } = await placeOrder({
         customer_id: user.uid,
         customer_name: profile.name,
         truck_id: cart.truck_id,
@@ -80,10 +88,40 @@ function Cart() {
         promo_code: promo?.code,
         discount_cents: discount,
         prep_minutes: prepMinutes,
+        payment_status: stripeEnabled ? 'pending' : 'paid',
       });
+
+      // 2) If the truck has Stripe Connect, redirect to Stripe Checkout
+      if (stripeEnabled && truck?.stripe_account_id) {
+        const res = await fetch('/api/stripe/checkout-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            order_id,
+            stripe_account_id: truck.stripe_account_id,
+            truck_name: cart.truck_name,
+            subtotal_cents: subtotal,
+            tax_cents: tax,
+            tip_cents: tip,
+            discount_cents: discount,
+            line_items: cart.lines.map((l) => ({
+              name: l.name,
+              unit_price_cents: l.unit_price_cents,
+              qty: l.qty,
+            })),
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Checkout failed');
+        clearCart();
+        window.location.href = json.url; // off-site to Stripe Checkout
+        return;
+      }
+
+      // 3) Otherwise (truck not Stripe-connected): simulated flow
       clearCart();
-      showToast('Order placed!');
-      router.replace(`/orders/${orderId}`);
+      showToast('Order placed (simulated payment)');
+      router.replace(`/orders/${order_id}`);
     } catch (e: any) {
       showToast(e?.message || 'Failed to place order');
     } finally {
@@ -146,9 +184,7 @@ function Cart() {
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold truncate">{l.name}</div>
               <div className="text-xs text-text-muted mt-0.5">{dollars(l.unit_price_cents)} each</div>
-              {l.notes && (
-                <div className="text-[11px] text-warning mt-1 line-clamp-2">⚠ {l.notes}</div>
-              )}
+              {l.notes && <div className="text-[11px] text-warning mt-1 line-clamp-2">⚠ {l.notes}</div>}
               <div className="inline-flex items-center gap-1 bg-surface-2 rounded-full mt-2 p-0.5">
                 <button className="w-7 h-7 rounded-full hover:bg-stroke font-bold" onClick={() => setLineQty(l.menu_item_id, l.qty - 1)}>−</button>
                 <span className="px-2 text-sm font-semibold min-w-[16px] text-center">{l.qty}</span>
@@ -162,16 +198,9 @@ function Cart() {
 
       <div className="px-5 mt-5">
         <label className="field-label">Notes for the truck (optional)</label>
-        <textarea
-          className="input"
-          rows={2}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="e.g. No onions, extra hot sauce"
-        />
+        <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. No onions, extra hot sauce" />
       </div>
 
-      {/* Promo code */}
       <div className="px-5 mt-5">
         <label className="field-label">Promo code</label>
         {promoCode ? (
@@ -185,28 +214,19 @@ function Cart() {
           </div>
         ) : (
           <div className="flex gap-2">
-            <input
-              className="input flex-1"
-              value={promoInput}
-              onChange={(e) => setPromoInput(e.target.value)}
-              placeholder="Try WYA10, WYA5, FIRST"
-            />
+            <input className="input flex-1" value={promoInput} onChange={(e) => setPromoInput(e.target.value)} placeholder="Try WYA10, WYA5, FIRST" />
             <button className="btn" onClick={tryApplyPromo}>Apply</button>
           </div>
         )}
         {promoErr && <div className="text-xs text-accent mt-1">{promoErr}</div>}
       </div>
 
-      {/* Tip */}
       <div className="px-5 mt-5">
         <div className="field-label">Tip the truck</div>
         <div className="grid grid-cols-4 gap-2">
           {TIP_OPTIONS.map((t, i) => (
-            <button
-              key={i}
-              onClick={() => setTipIdx(i)}
-              className={`h-10 rounded-lg text-sm font-semibold border transition-colors ${tipIdx === i ? 'border-accent bg-accent/10 text-white' : 'border-stroke bg-surface text-text-muted'}`}
-            >
+            <button key={i} onClick={() => setTipIdx(i)}
+              className={`h-10 rounded-lg text-sm font-semibold border transition-colors ${tipIdx === i ? 'border-accent bg-accent/10 text-white' : 'border-stroke bg-surface text-text-muted'}`}>
               {t.label}
             </button>
           ))}
@@ -231,11 +251,13 @@ function Cart() {
           onClick={onPlace}
           disabled={busy}
         >
-          <span>{busy ? <Spinner /> : 'Place pickup order'}</span>
+          <span>{busy ? <Spinner /> : (stripeEnabled ? 'Pay with Stripe' : 'Place pickup order')}</span>
           <span className="font-bold">{dollars(total)}</span>
         </button>
         <p className="text-[10px] text-text-muted text-center mt-2 pointer-events-auto">
-          Payment is simulated for the MVP — no card is charged.
+          {stripeEnabled
+            ? 'Secure card payment by Stripe · funds go to the truck minus our 5% fee'
+            : 'Truck hasn’t connected Stripe yet — this checkout is simulated'}
         </p>
       </div>
     </div>
