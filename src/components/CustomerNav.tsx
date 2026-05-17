@@ -27,7 +27,7 @@ const STATUS_LABEL: Record<Order['status'], string> = {
 
 // Pages where a sticky bottom button is already drawn, so the active-order banner
 // would overlap and interfere. Hide on these.
-const HIDE_BANNER_ON = ['/cart', '/checkout', '/chat'];
+const HIDE_BANNER_ON = ['/cart', '/checkout', '/chat', '/truck'];
 
 export function CustomerNav() {
   const path = usePathname();
