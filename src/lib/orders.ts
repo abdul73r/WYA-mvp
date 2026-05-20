@@ -33,6 +33,30 @@ export async function placeOrder(args: {
   const tax = Math.round((subtotal - discount) * TAX_RATE);
   const tip = args.tip_cents || 0;
   const total = subtotal - discount + tax + tip;
+  // ---- Pre-flight validation: real bugs that bite in production ----
+  // 1) Truck must still exist and be open. Otherwise the customer pays and the owner can't fulfill.
+  const truckSnap = await getDoc(doc(db, 'food_trucks', args.truck_id));
+  if (!truckSnap.exists()) throw new Error('This truck no longer exists.');
+  const truckData = truckSnap.data() as any;
+  if (truckData.is_open === false) {
+    throw new Error('This truck is marked closed right now. Try again when they reopen.');
+  }
+
+  // 2) None of the cart items can be sold out / deleted between adding-to-cart and ordering.
+  const itemChecks = await Promise.all(
+    args.lines.map((l) => getDoc(doc(db, 'food_trucks', args.truck_id, 'menu_items', l.menu_item_id))),
+  );
+  for (let i = 0; i < itemChecks.length; i++) {
+    const s = itemChecks[i];
+    if (!s.exists()) {
+      throw new Error(`"${args.lines[i].name}" is no longer on the menu. Please remove it from your cart.`);
+    }
+    const item = s.data() as any;
+    if (item.sold_out) {
+      throw new Error(`"${args.lines[i].name}" just sold out. Please remove it from your cart.`);
+    }
+  }
+
   const pickupCode = String(Math.floor(1000 + Math.random() * 9000));
   const paymentStatus = args.payment_status || 'paid';
 
@@ -173,6 +197,11 @@ export async function setOrderStatus(orderId: string, status: OrderStatus) {
   if (status === 'cancelled') patch.cancelled_at = serverTimestamp();
   await updateDoc(doc(db, 'orders', orderId), patch);
 
+  // If the owner is cancelling a Stripe-paid order, automatically refund the customer.
+  if (status === 'cancelled') {
+    await refundIfNeeded(orderId);
+  }
+
   const order = await getOrder(orderId);
   if (order) {
     const titleMap: Record<OrderStatus, string> = {
@@ -203,6 +232,30 @@ export async function cancelOrderByCustomer(orderId: string, customerId: string)
     cancelled_at: serverTimestamp(),
     cancelled_by: 'customer',
   });
+  await refundIfNeeded(orderId);
+}
+
+/** If an order was paid through Stripe, issue a refund via our API route. */
+async function refundIfNeeded(orderId: string): Promise<void> {
+  try {
+    const o = await getOrder(orderId);
+    if (!o) return;
+    if (o.payment_method !== 'stripe' || o.payment_status !== 'paid') return;
+    if (!o.stripe_payment_intent_id) return;
+    const res = await fetch('/api/stripe/refund', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payment_intent_id: o.stripe_payment_intent_id }),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error('refund failed:', txt);
+      return;
+    }
+    await updateDoc(doc(db, 'orders', orderId), { payment_status: 'failed' });
+  } catch (e) {
+    console.error('refund error', e);
+  }
 }
 
 export async function listOrderItems(orderId: string) {

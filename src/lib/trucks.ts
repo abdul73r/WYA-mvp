@@ -49,10 +49,25 @@ export async function updateTruck(truckId: string, patch: Partial<FoodTruck>) {
   await updateDoc(doc(db, TRUCKS, truckId), patch as any);
 }
 
+/**
+ * Live trucks, with stale ones filtered out client-side.
+ * An owner who closed their browser without going offline would otherwise
+ * stay on the customer map indefinitely — we hide them after 8 hours of no
+ * location updates. A background job (Cloud Function) should also flip
+ * is_live=false on these stale records.
+ */
+const STALE_LIVE_MS = 8 * 60 * 60 * 1000; // 8 hours
+
 export function subscribeLiveTrucks(cb: (trucks: FoodTruck[]) => void): Unsubscribe {
   const q = query(collection(db, TRUCKS), where('is_live', '==', true));
   return onSnapshot(q, (qs) => {
-    cb(qs.docs.map((d) => ({ id: d.id, ...d.data() } as FoodTruck)));
+    const all = qs.docs.map((d) => ({ id: d.id, ...d.data() } as FoodTruck));
+    const fresh = all.filter((t) => {
+      const updated = (t.location_updated_at as any)?.toDate?.();
+      if (!updated) return true; // legacy / no timestamp — treat as fresh
+      return Date.now() - updated.getTime() < STALE_LIVE_MS;
+    });
+    cb(fresh);
   });
 }
 
