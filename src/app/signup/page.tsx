@@ -1,7 +1,9 @@
 'use client';
-import { useState } from 'react';
+export const dynamic = 'force-dynamic';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { GeoPoint } from 'firebase/firestore';
 import { useAuth } from '@/lib/auth';
 import { BrandMark } from '@/components/BrandMark';
@@ -16,8 +18,16 @@ const CUISINES: CuisineTag[] = ['mexican','korean','halal','burgers','seafood','
 
 export default function SignupPage() {
   const router = useRouter();
+  const params = useSearchParams();
   const { signUp } = useAuth();
-  const [role, setRole] = useState<Role>('customer');
+  const initialRole = (params.get('role') === 'owner' ? 'owner' : 'customer') as Role;
+  const [role, setRole] = useState<Role>(initialRole);
+
+  // If someone hits /signup?role=owner from the landing, lock the role choice in
+  useEffect(() => {
+    const r = params.get('role');
+    if (r === 'owner' || r === 'customer') setRole(r);
+  }, [params]);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
