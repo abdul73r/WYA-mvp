@@ -5,7 +5,6 @@ export const metadata = {
   title: 'WYA — Find live food trucks near you',
   description: 'Discover, follow, and order from food trucks in real time.',
   manifest: '/manifest.webmanifest',
-  themeColor: '#FF3B7F',
   appleWebApp: {
     capable: true,
     title: 'WYA',
