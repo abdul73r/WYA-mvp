@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { RoleGuard } from '@/components/RoleGuard';
 import { OwnerNav } from '@/components/OwnerNav';
@@ -20,7 +20,9 @@ import { dollars, relativeTime } from '@/lib/utils';
 export default function WalletPage() {
   return (
     <RoleGuard allow={['owner']}>
-      <Wallet />
+      <Suspense fallback={<div className="min-h-screen grid place-items-center"><Spinner /></div>}>
+        <Wallet />
+      </Suspense>
       <OwnerNav />
       <ToastHost />
     </RoleGuard>

@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { RoleGuard } from '@/components/RoleGuard';
@@ -25,7 +25,9 @@ const STAGES: { key: OrderStatus; label: string; sub: string }[] = [
 export default function OrderDetailPage() {
   return (
     <RoleGuard allow={['customer','owner']}>
-      <OrderDetail />
+      <Suspense fallback={<div className="min-h-screen grid place-items-center"><Spinner /></div>}>
+        <OrderDetail />
+      </Suspense>
       <CustomerNav />
       <ToastHost />
     </RoleGuard>

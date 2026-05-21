@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { GeoPoint } from 'firebase/firestore';
@@ -16,7 +16,16 @@ import type { CuisineTag, Role } from '@/lib/types';
 
 const CUISINES: CuisineTag[] = ['mexican','korean','halal','burgers','seafood','desserts','vegan','pizza','bbq','other'];
 
+// Wrap the form in a Suspense boundary so useSearchParams doesn't break the build.
 export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen grid place-items-center"><Spinner /></div>}>
+      <SignupForm />
+    </Suspense>
+  );
+}
+
+function SignupForm() {
   const router = useRouter();
   const params = useSearchParams();
   const { signUp } = useAuth();
