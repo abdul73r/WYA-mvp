@@ -2,22 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStripe } from '@/lib/server-stripe';
 
 /**
- * Creates a Stripe Checkout Session for a customer order.
- * The payment is a destination charge: card is charged on our platform, then funds
- * (minus our 5% application fee) transfer into the truck's Stripe Connect account.
- *
- * Body: {
- *   order_id: string;
- *   stripe_account_id: string;
- *   truck_name: string;
- *   subtotal_cents: number;
- *   tax_cents: number;
- *   tip_cents: number;
- *   discount_cents?: number;
- *   line_items: { name: string; unit_price_cents: number; qty: number; }[];
- * }
- * Returns: { url, session_id }
+ * Returns the public origin the request came from (https://wyatruck.com,
+ * https://wya-mvp-1qkt.vercel.app, http://localhost:3000, etc.).
+ * Works whether the user is on the production URL, a preview deployment,
+ * or local dev — without needing NEXT_PUBLIC_BASE_URL to be set right.
  */
+function originOf(req: NextRequest): string {
+  const origin = req.headers.get('origin');
+  if (origin) return origin.replace(/\/$/, '');
+  const proto = req.headers.get('x-forwarded-proto') || 'https';
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+  if (host) return `${proto}://${host}`;
+  return (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -32,9 +30,8 @@ export async function POST(req: NextRequest) {
     }
 
     const stripe = getStripe();
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    const baseUrl = originOf(req);
 
-    // 5% platform fee on subtotal (excluding tax/tip — tip flows entirely to truck)
     const taxable = Math.max(0, subtotal_cents - discount_cents);
     const applicationFee = Math.round(taxable * 0.05);
 
@@ -46,10 +43,6 @@ export async function POST(req: NextRequest) {
       },
       quantity: l.qty,
     }));
-    if (discount_cents > 0) {
-      // Stripe doesn't support negative line items in Checkout; folding into a coupon-like adjustment isn't possible mid-flight.
-      // Easiest: don't show a discount line, just lower the totals via tax/fee math. Tip + tax become separate "lines".
-    }
     if (tax_cents > 0) {
       items.push({
         price_data: { currency: 'usd', product_data: { name: 'Tax' }, unit_amount: tax_cents },
