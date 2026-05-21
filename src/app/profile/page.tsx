@@ -118,8 +118,17 @@ function Profile() {
         <Link href="/orders" className="px-5 py-4 border-t border-b border-stroke flex items-center justify-between">
           <span>Order history</span><span className="text-text-faint">›</span>
         </Link>
+        <Link href="/following" className="px-5 py-4 border-b border-stroke flex items-center justify-between">
+          <span>Followed trucks</span><span className="text-text-faint">›</span>
+        </Link>
+        <Link href="/account" className="px-5 py-4 border-b border-stroke flex items-center justify-between">
+          <span>⚙️ Account settings</span><span className="text-text-faint">›</span>
+        </Link>
+        <Link href="/help" className="px-5 py-4 border-b border-stroke flex items-center justify-between">
+          <span>💬 Help &amp; FAQ</span><span className="text-text-faint">›</span>
+        </Link>
         <button
-          onClick={async () => { await signOut(); router.replace('/login'); }}
+          onClick={async () => { await signOut(); router.replace('/'); }}
           className="w-full text-left px-5 py-4 border-b border-stroke flex items-center justify-between"
         >
           <span>Sign out</span><span className="text-text-faint">›</span>

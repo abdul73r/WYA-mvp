@@ -14,7 +14,6 @@ export default function LoginPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // already signed in? route to the right place
   useEffect(() => {
     if (loading || !user || !profile) return;
     router.replace(profile.role === 'owner' ? (profile.truck_id ? '/dashboard' : '/setup') : '/home');
@@ -24,12 +23,18 @@ export default function LoginPage() {
     e.preventDefault();
     setErr(null); setBusy(true);
     try { await signIn(email, password); }
-    catch (e: any) { setErr(e?.message ?? 'Sign-in failed'); }
+    catch (e: any) { setErr(e?.message?.replace('Firebase:', '').trim() ?? 'Sign-in failed'); }
     finally { setBusy(false); }
   }
 
   return (
-    <div className="min-h-screen max-w-md mx-auto px-7 pt-20 pb-10 flex flex-col">
+    <div className="min-h-screen max-w-md mx-auto px-7 pt-6 pb-10 flex flex-col">
+      <div className="mb-6">
+        <Link href="/" className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-white">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 6l-6 6 6 6" /></svg>
+          Back to home
+        </Link>
+      </div>
       <BrandMark size={48} />
       <h1 className="text-3xl font-extrabold mt-6 tracking-tight">Welcome back</h1>
       <p className="text-text-muted mt-1 text-sm">Find every food truck near you, in real time.</p>

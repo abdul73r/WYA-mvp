@@ -102,17 +102,23 @@ function OwnerOrders() {
               </div>
               <span className={`text-xs font-bold uppercase tracking-wider ${statusTone(o.status)}`}>{o.status}</span>
             </div>
-            {/* Payment-method badge */}
-            <div className="mt-2">
-              {o.payment_method === 'cash_on_pickup' ? (
+            {/* Badges row */}
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {o.payment_method === 'cash_on_pickup' && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-warning/15 text-warning">
                   💵 Collect {dollars(o.total_cents)} at pickup
                 </span>
-              ) : o.payment_method === 'stripe' ? (
+              )}
+              {o.payment_method === 'stripe' && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-success/15 text-success">
                   ✓ Paid via card
                 </span>
-              ) : null}
+              )}
+              {o.scheduled_for && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-accent/15 text-accent">
+                  📅 Pickup {(o.scheduled_for as any).toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                </span>
+              )}
             </div>
             {o.notes && <div className="text-xs text-text-muted mt-2 px-3 py-2 bg-surface-2 rounded-lg"><b className="text-white">Notes:</b> {o.notes}</div>}
             <div className="flex gap-2 mt-3 flex-wrap">

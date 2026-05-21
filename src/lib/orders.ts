@@ -1,7 +1,7 @@
 'use client';
 import {
   addDoc, collection, doc, getDoc, getDocs, onSnapshot, query,
-  serverTimestamp, updateDoc, where, writeBatch, Unsubscribe,
+  serverTimestamp, Timestamp, updateDoc, where, writeBatch, Unsubscribe,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { CartLine, Order, OrderStatus } from './types';
@@ -27,6 +27,7 @@ export async function placeOrder(args: {
   /** 'paid' = simulated payment (no Stripe). 'pending' = waiting for Stripe Checkout to confirm. */
   payment_status?: 'pending' | 'paid';
   payment_method?: 'stripe' | 'cash_on_pickup' | 'simulated';
+  scheduled_for?: Date | null;
 }): Promise<{ order_id: string; pickup_code: string; total_cents: number }> {
   const subtotal = args.lines.reduce((s, l) => s + l.unit_price_cents * l.qty, 0);
   const discount = Math.min(args.discount_cents || 0, subtotal);
@@ -77,6 +78,7 @@ export async function placeOrder(args: {
     pickup_code: pickupCode,
     payment_status: paymentStatus,
     payment_method: args.payment_method || 'simulated',
+    scheduled_for: args.scheduled_for ? Timestamp.fromDate(args.scheduled_for) : null,
     notes: args.notes || '',
     rated: false,
     placed_at: serverTimestamp(),

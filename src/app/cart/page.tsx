@@ -45,6 +45,8 @@ function Cart() {
   const [promoErr, setPromoErr] = useState<string | null>(null);
   const [truck, setTruck] = useState<FoodTruck | null>(null);
   const [payMethod, setPayMethod] = useState<PayMethod>('cash_on_pickup');
+  const [scheduleMode, setScheduleMode] = useState<'asap' | 'later'>('asap');
+  const [scheduleTime, setScheduleTime] = useState(''); // "HH:MM" 24h
 
   useEffect(() => {
     if (!cart) return;
@@ -84,6 +86,18 @@ function Cart() {
     try {
       const isStripe = payMethod === 'stripe' && stripeEnabled && truck?.stripe_account_id;
 
+      // Build scheduled pickup datetime if "Later" was picked
+      let scheduledFor: Date | null = null;
+      if (scheduleMode === 'later' && scheduleTime) {
+        const [h, m] = scheduleTime.split(':').map(Number);
+        const dt = new Date();
+        dt.setHours(h, m, 0, 0);
+        if (dt.getTime() < Date.now() + 10 * 60 * 1000) {
+          throw new Error('Pickup time must be at least 10 minutes from now.');
+        }
+        scheduledFor = dt;
+      }
+
       const { order_id } = await placeOrder({
         customer_id: user.uid,
         customer_name: profile.name,
@@ -97,6 +111,7 @@ function Cart() {
         prep_minutes: prepMinutes,
         payment_method: isStripe ? 'stripe' : 'cash_on_pickup',
         payment_status: isStripe ? 'pending' : 'paid',
+        scheduled_for: scheduledFor,
       });
 
       if (isStripe) {
@@ -203,6 +218,34 @@ function Cart() {
             <div className="text-sm font-bold">{dollars(l.unit_price_cents * l.qty)}</div>
           </div>
         ))}
+      </div>
+
+      {/* Schedule pickup */}
+      <div className="px-5 mt-5">
+        <div className="field-label">Pickup time</div>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setScheduleMode('asap')}
+            className={`h-12 rounded-lg text-sm font-semibold border ${scheduleMode === 'asap' ? 'border-accent bg-accent/10 text-white' : 'border-stroke bg-surface text-text-muted'}`}
+          >⚡ ASAP</button>
+          <button
+            type="button"
+            onClick={() => setScheduleMode('later')}
+            className={`h-12 rounded-lg text-sm font-semibold border ${scheduleMode === 'later' ? 'border-accent bg-accent/10 text-white' : 'border-stroke bg-surface text-text-muted'}`}
+          >📅 Schedule</button>
+        </div>
+        {scheduleMode === 'later' && (
+          <div className="mt-2">
+            <input
+              type="time"
+              className="input"
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
+            />
+            <div className="text-[11px] text-text-muted mt-1">Pickup must be at least 10 min from now. Today only.</div>
+          </div>
+        )}
       </div>
 
       {/* Notes */}

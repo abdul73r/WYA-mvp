@@ -167,13 +167,21 @@ function Home() {
         <div className="flex gap-3 overflow-x-auto px-5 pb-1 no-scrollbar">
           {CATEGORIES.map((c) => {
             const active = cat === c.key;
-            return (
-              <button key={c.key} onClick={() => setCat(c.key)} className="flex-shrink-0 flex flex-col items-center gap-1 w-16">
+            // "All" still filters inline; specific cuisines deep-link to /cuisine/[name]
+            return c.key === 'all' ? (
+              <button key={c.key} onClick={() => setCat('all')} className="flex-shrink-0 flex flex-col items-center gap-1 w-16">
                 <div className={`w-14 h-14 rounded-2xl grid place-items-center text-2xl border transition-colors ${active ? 'border-accent bg-accent/10' : 'border-stroke bg-surface'}`}>
                   {c.emoji}
                 </div>
                 <span className={`text-[11px] ${active ? 'text-white font-semibold' : 'text-text-muted'}`}>{c.label}</span>
               </button>
+            ) : (
+              <Link key={c.key} href={`/cuisine/${c.key}`} className="flex-shrink-0 flex flex-col items-center gap-1 w-16">
+                <div className="w-14 h-14 rounded-2xl grid place-items-center text-2xl border border-stroke bg-surface">
+                  {c.emoji}
+                </div>
+                <span className="text-[11px] text-text-muted">{c.label}</span>
+              </Link>
             );
           })}
         </div>

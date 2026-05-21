@@ -2,10 +2,11 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import {
   onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword,
-  signOut as fbSignOut, updateProfile, User,
+  signOut as fbSignOut, updateProfile, updatePassword as fbUpdatePassword,
+  reauthenticateWithCredential, EmailAuthProvider, deleteUser as fbDeleteUser, User,
 } from 'firebase/auth';
 import {
-  doc, setDoc, serverTimestamp, onSnapshot,
+  doc, setDoc, serverTimestamp, onSnapshot, updateDoc, deleteDoc,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { clearCart } from './cart';
@@ -18,6 +19,9 @@ interface AuthCtx {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string, role: Role) => Promise<string>;
   signOut: () => Promise<void>;
+  updateDisplayName: (newName: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  deleteAccount: (currentPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthCtx | null>(null);
@@ -69,13 +73,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    // Clear any device-local state tied to the previous user (e.g. the cart)
     try { clearCart(); } catch {}
     await fbSignOut(auth);
   }
 
+  async function updateDisplayName(newName: string) {
+    if (!auth.currentUser) throw new Error('Not signed in');
+    const trimmed = newName.trim();
+    if (!trimmed) throw new Error('Name cannot be empty');
+    await updateProfile(auth.currentUser, { displayName: trimmed });
+    await updateDoc(doc(db, 'users', auth.currentUser.uid), { name: trimmed });
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    const u = auth.currentUser;
+    if (!u || !u.email) throw new Error('Not signed in');
+    if (newPassword.length < 6) throw new Error('New password must be at least 6 characters');
+    const cred = EmailAuthProvider.credential(u.email, currentPassword);
+    await reauthenticateWithCredential(u, cred);
+    await fbUpdatePassword(u, newPassword);
+  }
+
+  async function deleteAccount(currentPassword: string) {
+    const u = auth.currentUser;
+    if (!u || !u.email) throw new Error('Not signed in');
+    const cred = EmailAuthProvider.credential(u.email, currentPassword);
+    await reauthenticateWithCredential(u, cred);
+    try { await deleteDoc(doc(db, 'users', u.uid)); } catch {}
+    await fbDeleteUser(u);
+    try { clearCart(); } catch {}
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{
+      user, profile, loading,
+      signIn, signUp, signOut,
+      updateDisplayName, changePassword, deleteAccount,
+    }}>
       {children}
     </AuthContext.Provider>
   );

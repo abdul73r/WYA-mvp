@@ -122,6 +122,21 @@ function OrderDetail() {
         </div>
       )}
 
+      {/* Scheduled pickup reminder */}
+      {order.scheduled_for && !cancelled && order.status !== 'completed' && (
+        <div className="px-5 mt-4">
+          <div className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 flex items-center gap-3">
+            <span className="text-2xl">📅</span>
+            <div>
+              <div className="text-sm font-bold">
+                Pickup scheduled for {(order.scheduled_for as any).toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </div>
+              <div className="text-[11px] text-text-muted">The truck will start preparing closer to that time.</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pay-at-pickup reminder */}
       {order.payment_method === 'cash_on_pickup' && !cancelled && order.status !== 'completed' && (
         <div className="px-5 mt-4">
