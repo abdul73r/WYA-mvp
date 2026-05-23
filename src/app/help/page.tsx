@@ -1,7 +1,10 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Spinner } from '@/components/Spinner';
+
+const SUPPORT_EMAIL = 'wyatruck@gmail.com';
 
 const FAQS: { q: string; a: string }[] = [
   { q: 'How do I find a food truck?',
@@ -26,12 +29,14 @@ const FAQS: { q: string; a: string }[] = [
     a: 'Your location is used to find nearby trucks and is never stored or shared. Truck owners only see your name, order, and pickup code — not your location.' },
 ];
 
+interface ChatMsg { role: 'user' | 'assistant'; content: string }
+
 export default function HelpPage() {
   const router = useRouter();
   const [openIdx, setOpenIdx] = useState<number | null>(null);
 
   return (
-    <div className="min-h-screen max-w-md mx-auto pb-16 page-enter">
+    <div className="min-h-screen max-w-md mx-auto pb-20 page-enter">
       <header className="sticky top-0 z-30 bg-bg/95 backdrop-blur border-b border-stroke px-5 py-3 flex items-center gap-3">
         <button onClick={() => router.back()} className="w-9 h-9 rounded-full bg-surface border border-stroke grid place-items-center">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round"><path d="M15 6l-6 6 6 6" /></svg>
@@ -41,10 +46,17 @@ export default function HelpPage() {
 
       <div className="px-5 mt-6">
         <h2 className="text-2xl font-extrabold">How can we help?</h2>
-        <p className="text-text-muted text-sm mt-1">Common questions about using WYA.</p>
+        <p className="text-text-muted text-sm mt-1">Ask the WYA assistant or browse common questions.</p>
       </div>
 
-      <div className="mt-5">
+      {/* AI Chat */}
+      <div className="px-5 mt-5">
+        <AIChat />
+      </div>
+
+      {/* FAQ */}
+      <h3 className="px-5 mt-8 text-xs uppercase tracking-widest text-text-muted font-bold">Common questions</h3>
+      <div className="mt-3">
         {FAQS.map((f, i) => (
           <div key={i} className="border-b border-stroke">
             <button
@@ -65,12 +77,116 @@ export default function HelpPage() {
         <div className="card p-4">
           <div className="text-sm font-bold">Still stuck?</div>
           <div className="text-xs text-text-muted mt-1">Email us and we'll get back within 24 hours.</div>
-          <a href="mailto:support@wya.app" className="btn primary block mt-3">Email support@wya.app</a>
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="btn primary block mt-3">Email {SUPPORT_EMAIL}</a>
         </div>
       </div>
 
       <div className="px-5 mt-6 text-[11px] text-text-faint text-center">
         <Link href="/" className="hover:text-white">← Back to home</Link>
+      </div>
+    </div>
+  );
+}
+
+function AIChat() {
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    { role: 'assistant', content: `Hey! I'm the WYA assistant. Ask me about ordering, payments, pickup codes, or anything else about the app.` },
+  ]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [messages.length, sending]);
+
+  async function send() {
+    const text = input.trim();
+    if (!text || sending) return;
+    const next: ChatMsg[] = [...messages, { role: 'user', content: text }];
+    setMessages(next);
+    setInput('');
+    setSending(true);
+    try {
+      const res = await fetch('/api/ai-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: next }),
+      });
+      const json = await res.json();
+      setMessages((m) => [...m, { role: 'assistant', content: json.reply || 'Sorry, I couldn\'t answer that.' }]);
+    } catch {
+      setMessages((m) => [...m, { role: 'assistant', content: `Connection issue. Try emailing ${SUPPORT_EMAIL}.` }]);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const suggestions = [
+    'How do I pay?',
+    'What is the pickup code?',
+    'How do I get paid as a truck?',
+  ];
+
+  return (
+    <div className="rounded-2xl border border-accent/30 bg-gradient-to-br from-accent/8 to-surface overflow-hidden">
+      <div className="px-4 py-3 border-b border-stroke flex items-center gap-2">
+        <span className="w-8 h-8 rounded-full bg-accent grid place-items-center text-white font-extrabold">W</span>
+        <div>
+          <div className="text-sm font-bold">WYA Assistant</div>
+          <div className="text-[10px] text-text-muted">Usually replies in seconds</div>
+        </div>
+      </div>
+
+      <div ref={listRef} className="max-h-72 overflow-y-auto p-4 flex flex-col gap-3 bg-bg/40">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-snug whitespace-pre-wrap break-words ${
+              m.role === 'user'
+                ? 'bg-accent text-white rounded-br-md'
+                : 'bg-surface border border-stroke rounded-bl-md'
+            }`}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {sending && (
+          <div className="flex justify-start">
+            <div className="bg-surface border border-stroke rounded-2xl rounded-bl-md px-3 py-2">
+              <div className="flex gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce" style={{ animationDelay: '120ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-text-muted animate-bounce" style={{ animationDelay: '240ms' }} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Quick-pick suggestions */}
+      {messages.length === 1 && (
+        <div className="px-3 pb-2 flex gap-2 overflow-x-auto no-scrollbar">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              onClick={() => { setInput(s); }}
+              className="chip flex-shrink-0"
+            >{s}</button>
+          ))}
+        </div>
+      )}
+
+      <div className="p-3 border-t border-stroke flex gap-2">
+        <input
+          className="input flex-1"
+          placeholder="Ask anything…"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+        />
+        <button onClick={send} disabled={!input.trim() || sending} className="btn primary">
+          {sending ? <Spinner /> : 'Send'}
+        </button>
       </div>
     </div>
   );
